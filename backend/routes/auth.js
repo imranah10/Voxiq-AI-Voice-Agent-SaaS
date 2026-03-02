@@ -53,7 +53,7 @@ router.post('/send-otp', async (req, res) => {
     const newOtp = new Otp({ email, otp: generatedOtp });
     await newOtp.save();
 
-    // ** FOR TESTING: PRINT OTP TO CONSOLE ** 
+    // ** FOR TESTING: PRINT OTP TO CONSOLE AND RETURN IT ** 
     // Later, connect Nodemailer/Resend here
     console.log(`\n\n======================================`);
     console.log(`🚨 DEVELOPMENT ONLY: Simulated Email`);
@@ -61,7 +61,10 @@ router.post('/send-otp', async (req, res) => {
     console.log(`Your Voxiq Verification Code is: ${generatedOtp}`);
     console.log(`======================================\n\n`);
 
-    res.status(200).json({ message: 'OTP sent to your email' });
+    res.status(200).json({ 
+        message: 'OTP sent! (Test Mode Active)', 
+        testOtp: generatedOtp // Sending to frontend for testing
+    });
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server Error');

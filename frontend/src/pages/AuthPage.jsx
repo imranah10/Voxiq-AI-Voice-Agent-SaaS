@@ -7,6 +7,7 @@ export default function AuthPage() {
     const [formData, setFormData] = useState({ companyName: '', email: '', password: '' });
     const [otp, setOtp] = useState('');
     const [showOtpInput, setShowOtpInput] = useState(false);
+    const [testOtpFromBackend, setTestOtpFromBackend] = useState('');
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [loading, setLoading] = useState(false);
@@ -50,7 +51,10 @@ export default function AuthPage() {
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.error || 'Failed to send OTP');
 
-                    setSuccessMsg('Email Verification sent! Check your terminal console for the OTP.');
+                    setSuccessMsg('Email Verification sent!');
+                    if (data.testOtp) {
+                        setTestOtpFromBackend(data.testOtp);
+                    }
                     setShowOtpInput(true);
                 } else {
                     // Step 2: Verify OTP and Register
@@ -107,6 +111,14 @@ export default function AuthPage() {
                                 onChange={(e) => setOtp(e.target.value)}
                             />
                             <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.75rem', marginTop: '1rem' }}>Code sent to {formData.email}</p>
+
+                            {testOtpFromBackend && (
+                                <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(99, 102, 241, 0.1)', border: '1px dashed #6366f1', borderRadius: '8px', textAlign: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Test Mode OTP</span>
+                                    <strong style={{ fontSize: '1.25rem', color: '#818cf8', letterSpacing: '0.25rem' }}>{testOtpFromBackend}</strong>
+                                    <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.5rem' }}>(Since email is not connected yet, use this code to register)</div>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         // STANDARD LOGIN/REGISTRATION DETAILS STEP
@@ -167,6 +179,7 @@ export default function AuthPage() {
                         onClick={() => {
                             setIsLogin(!isLogin);
                             setShowOtpInput(false);
+                            setTestOtpFromBackend('');
                             setSuccessMsg('');
                             setError('');
                         }}
