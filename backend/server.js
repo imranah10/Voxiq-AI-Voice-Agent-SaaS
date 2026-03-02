@@ -32,7 +32,7 @@ app.use('/api/auth', require('./routes/auth'));
 // 1. ENDPOINT: Create a New AI Assistant for a Company
 // ---------------------------------------------------------
 app.post('/api/saas/create-agent', auth, async (req, res) => {
-  const { companyName, companyRules, agentName, agentGender, agentRegion } = req.body;
+  const { companyName, companyRules, agentName, agentGender, agentRegion, agentCustomVoiceId } = req.body;
 
   if (!companyName || !companyRules) {
     return res.status(400).json({ error: "Company Name and Rules are required!" });
@@ -44,13 +44,13 @@ app.post('/api/saas/create-agent', auth, async (req, res) => {
     const agentCount = user.agents ? user.agents.length : 0;
     
     if (user.plan === 'FREE' && agentCount >= 5) {
-        return res.status(403).json({ error: "Free/Starter Plan allows maximum 5 Agents. Please upgrade to Pro." });
+        return res.status(403).json({ error: "Free Plan allows only 5 Agents. Please upgrade to Pro." });
     }
     if (user.plan === 'PRO_PLATFORM' && agentCount >= 15) {
-        return res.status(403).json({ error: "Pro Plan allows maximum 15 Agents. Please upgrade to Enterprise." });
+        return res.status(403).json({ error: "Pro Plan allows 15 Agents. Please upgrade to Enterprise." });
     }
     if (user.plan === 'ENTERPRISE' && agentCount >= 50) {
-        return res.status(403).json({ error: "Enterprise Plan allows maximum 50 Agents. Contact Support for higher limits." });
+        return res.status(403).json({ error: "Enterprise Plan allows 50 Agents. Contact Support for higher limits." });
     }
 
     // 1. Dynamic Name & Region Logic
@@ -97,7 +97,9 @@ app.post('/api/saas/create-agent', auth, async (req, res) => {
     }
 
     let selectedVoiceId = femaleVoices[0]; // Default
-    if (agentGender === 'male') {
+    if (agentGender === 'custom' && agentCustomVoiceId) {
+        selectedVoiceId = agentCustomVoiceId;
+    } else if (agentGender === 'male') {
         selectedVoiceId = maleVoices[Math.floor(Math.random() * maleVoices.length)];
     } else if (agentGender === 'female') {
         selectedVoiceId = femaleVoices[Math.floor(Math.random() * femaleVoices.length)];

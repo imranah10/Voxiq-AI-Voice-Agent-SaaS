@@ -7,12 +7,20 @@ export default function ClientDashboard() {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isCreatingAgent, setIsCreatingAgent] = useState(false);
-    const [agentForm, setAgentForm] = useState({ companyName: '', agentName: '', agentGender: 'female', agentRegion: 'international', companyRules: '' });
+    const [agentForm, setAgentForm] = useState({ companyName: '', agentName: '', agentGender: 'female', agentRegion: 'international', companyRules: '', agentCustomVoiceId: '' });
     const [creatingAgentLoading, setCreatingAgentLoading] = useState(false);
     const [isUploadingKB, setIsUploadingKB] = useState(false);
     const [kbFile, setKbFile] = useState(null);
     const [uploadingKBLoading, setUploadingKBLoading] = useState(false);
     const navigate = useNavigate();
+
+    // Determine max agents allowed based on plan
+    const getMaxAgents = (plan) => {
+        if (!plan || plan === 'FREE') return 5;
+        if (plan === 'PRO_PLATFORM') return 15;
+        if (plan === 'ENTERPRISE') return 50;
+        return 5;
+    };
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -60,7 +68,7 @@ export default function ClientDashboard() {
             if (res.ok) {
                 setUser(prev => ({ ...prev, agents: [...(prev.agents || []), { assistantId: data.assistantId, name: data.assignedName || `${agentForm.agentName} (for ${agentForm.companyName})`, linkedNumber: 'Unassigned' }] }));
                 setIsCreatingAgent(false);
-                setAgentForm({ companyName: '', agentName: '', agentGender: 'female', agentRegion: 'international', companyRules: '' });
+                setAgentForm({ companyName: '', agentName: '', agentGender: 'female', agentRegion: 'international', companyRules: '', agentCustomVoiceId: '' });
             } else {
                 alert(data.error || 'Failed to create agent');
             }
@@ -173,106 +181,143 @@ export default function ClientDashboard() {
                 </header>
 
                 {/* Tab Content: Agents */}
-                {activeTab === 'agents' && (
-                    <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Active Voice Agents</h2>
-                            <button onClick={() => setIsCreatingAgent(true)} className="primary" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}><Plus size={16} /> Create New Agent</button>
-                        </div>
+                {activeTab === 'agents' && (() => {
+                    const currentAgentCount = user.agents?.length || 0;
+                    const maxAgents = getMaxAgents(user.plan);
+                    const canCreateMore = currentAgentCount < maxAgents;
 
-                        {isCreatingAgent && (
-                            <div className="glass-card" style={{ marginBottom: '2rem', padding: '2rem', border: '1px solid #6366f1' }}>
-                                <h3 style={{ marginBottom: '1.5rem' }}>Create AI Voice Agent</h3>
-                                <form onSubmit={handleCreateAgentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                    <input
-                                        type="text"
-                                        placeholder="Company Name (e.g., Zomato)"
-                                        required
-                                        value={agentForm.companyName}
-                                        onChange={(e) => setAgentForm({ ...agentForm, companyName: e.target.value })}
-                                        style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                                    />
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    return (
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                                <div>
+                                    <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Active Voice Agents</h2>
+                                    <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+                                        Using {currentAgentCount} of {maxAgents} agents included in your {user.plan || 'FREE'} plan.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        if (canCreateMore) setIsCreatingAgent(true);
+                                    }}
+                                    className="primary"
+                                    style={{
+                                        padding: '0.5rem 1rem',
+                                        fontSize: '0.875rem',
+                                        opacity: canCreateMore ? 1 : 0.5,
+                                        cursor: canCreateMore ? 'pointer' : 'not-allowed'
+                                    }}
+                                    title={!canCreateMore ? "Upgrade plan to create more agents" : ""}
+                                >
+                                    <Plus size={16} />
+                                    {canCreateMore ? 'Create New Agent' : 'Agent Limit Reached'}
+                                </button>
+                            </div>
+
+                            {isCreatingAgent && (
+                                <div className="glass-card" style={{ marginBottom: '2rem', padding: '2rem', border: '1px solid #6366f1' }}>
+                                    <h3 style={{ marginBottom: '1.5rem' }}>Create AI Voice Agent</h3>
+                                    <form onSubmit={handleCreateAgentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                         <input
                                             type="text"
-                                            placeholder="Agent Name (Leave blank for Auto Random Name)"
-                                            value={agentForm.agentName}
-                                            onChange={(e) => setAgentForm({ ...agentForm, agentName: e.target.value })}
+                                            placeholder="Company Name (e.g., Zomato)"
+                                            required
+                                            value={agentForm.companyName}
+                                            onChange={(e) => setAgentForm({ ...agentForm, companyName: e.target.value })}
                                             style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
                                         />
-                                        <select
-                                            value={agentForm.agentGender}
-                                            onChange={(e) => setAgentForm({ ...agentForm, agentGender: e.target.value })}
-                                            style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                                        >
-                                            <option value="female">Female Voice</option>
-                                            <option value="male">Male Voice</option>
-                                            <option value="random">Random Voice</option>
-                                        </select>
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        <label style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Target Customer Region (Controls Language & Accent)</label>
-                                        <select
-                                            value={agentForm.agentRegion}
-                                            onChange={(e) => setAgentForm({ ...agentForm, agentRegion: e.target.value })}
-                                            style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                                        >
-                                            <option value="international">🌍 International (Global English)</option>
-                                            <option value="indian">🇮🇳 Indian (Hindi + Indian English)</option>
-                                        </select>
-                                    </div>
-                                    <textarea
-                                        placeholder="System Rules (e.g., You handle refunds. Always be polite...)"
-                                        required
-                                        rows="4"
-                                        value={agentForm.companyRules}
-                                        onChange={(e) => setAgentForm({ ...agentForm, companyRules: e.target.value })}
-                                        style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                                    ></textarea>
-                                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                                        <button type="button" onClick={() => setIsCreatingAgent(false)} style={{ background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}>Cancel</button>
-                                        <button type="submit" className="primary" disabled={creatingAgentLoading}>
-                                            {creatingAgentLoading ? 'Deploying...' : 'Deploy Agent to Vapi'}
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        )}
-
-                        <div className="grid-3">
-                            {user.agents && user.agents.length > 0 ? (
-                                user.agents.map((agent, index) => (
-                                    <div key={index} className="glass-card" style={{ padding: '1.5rem' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                <div style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', padding: '0.5rem', borderRadius: '8px' }}><Bot size={24} /></div>
-                                                <div>
-                                                    <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{agent.name}</h3>
-                                                    <span style={{ fontSize: '0.75rem', color: '#22c55e', background: 'rgba(34, 197, 94, 0.1)', padding: '2px 8px', borderRadius: '12px' }}>Online</span>
-                                                </div>
-                                            </div>
-                                            <button style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', cursor: 'pointer', padding: '0.5rem', borderRadius: '8px' }}><Settings size={18} /></button>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <input
+                                                type="text"
+                                                placeholder="Agent Name (Leave blank for Auto Random Name)"
+                                                value={agentForm.agentName}
+                                                onChange={(e) => setAgentForm({ ...agentForm, agentName: e.target.value })}
+                                                style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                                            />
+                                            <select
+                                                value={agentForm.agentGender}
+                                                onChange={(e) => setAgentForm({ ...agentForm, agentGender: e.target.value })}
+                                                style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                                            >
+                                                <option value="female">Female Voice</option>
+                                                <option value="male">Male Voice</option>
+                                                <option value="random">Random Voice</option>
+                                                <option value="custom">Custom Voice ID (Advanced)</option>
+                                            </select>
                                         </div>
-
-                                        <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1.5rem' }}>ID: {agent.assistantId}</p>
-
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
-                                            <div>
-                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Linked Number</div>
-                                                <div style={{ fontSize: '0.875rem' }}>{agent.linkedNumber || 'Unassigned'}</div>
-                                            </div>
-                                            <button style={{ background: 'transparent', border: '1px solid #6366f1', color: '#6366f1', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}>
-                                                <Play size={14} /> Test
+                                        {agentForm.agentGender === 'custom' && (
+                                            <input
+                                                type="text"
+                                                placeholder="Enter Custom Provider Voice ID (e.g. from PlayHT or ElevenLabs)"
+                                                value={agentForm.agentCustomVoiceId}
+                                                onChange={(e) => setAgentForm({ ...agentForm, agentCustomVoiceId: e.target.value })}
+                                                style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid #6366f1', color: '#fff', borderRadius: '8px' }}
+                                                required
+                                            />
+                                        )}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            <label style={{ fontSize: '0.875rem', color: '#94a3b8' }}>Target Customer Region (Controls Language & Accent)</label>
+                                            <select
+                                                value={agentForm.agentRegion}
+                                                onChange={(e) => setAgentForm({ ...agentForm, agentRegion: e.target.value })}
+                                                style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                                            >
+                                                <option value="international">🌍 International (Global English)</option>
+                                                <option value="indian">🇮🇳 Indian (Hindi + Indian English)</option>
+                                            </select>
+                                        </div>
+                                        <textarea
+                                            placeholder="System Rules (e.g., You handle refunds. Always be polite...)"
+                                            required
+                                            rows="4"
+                                            value={agentForm.companyRules}
+                                            onChange={(e) => setAgentForm({ ...agentForm, companyRules: e.target.value })}
+                                            style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                                        ></textarea>
+                                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                                            <button type="button" onClick={() => setIsCreatingAgent(false)} style={{ background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}>Cancel</button>
+                                            <button type="submit" className="primary" disabled={creatingAgentLoading}>
+                                                {creatingAgentLoading ? 'Deploying...' : 'Deploy Agent to Vapi'}
                                             </button>
                                         </div>
-                                    </div>
-                                ))
-                            ) : (
-                                <div style={{ color: '#94a3b8', padding: '1rem' }}>No agents running. Click "Create New Agent" to start.</div>
+                                    </form>
+                                </div>
                             )}
+
+                            <div className="grid-3">
+                                {user.agents && user.agents.length > 0 ? (
+                                    user.agents.map((agent, index) => (
+                                        <div key={index} className="glass-card" style={{ padding: '1.5rem' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                    <div style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', padding: '0.5rem', borderRadius: '8px' }}><Bot size={24} /></div>
+                                                    <div>
+                                                        <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{agent.name}</h3>
+                                                        <span style={{ fontSize: '0.75rem', color: '#22c55e', background: 'rgba(34, 197, 94, 0.1)', padding: '2px 8px', borderRadius: '12px' }}>Online</span>
+                                                    </div>
+                                                </div>
+                                                <button style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', cursor: 'pointer', padding: '0.5rem', borderRadius: '8px' }}><Settings size={18} /></button>
+                                            </div>
+
+                                            <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1.5rem' }}>ID: {agent.assistantId}</p>
+
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Linked Number</div>
+                                                    <div style={{ fontSize: '0.875rem' }}>{agent.linkedNumber || 'Unassigned'}</div>
+                                                </div>
+                                                <button style={{ background: 'transparent', border: '1px solid #6366f1', color: '#6366f1', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}>
+                                                    <Play size={14} /> Test
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div style={{ color: '#94a3b8', padding: '1rem' }}>No agents running. Click "Create New Agent" to start.</div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })}
 
                 {/* Tab Content: Knowledge Base */}
                 {activeTab === 'knowledge' && (

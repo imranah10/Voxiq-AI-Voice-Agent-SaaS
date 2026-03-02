@@ -237,6 +237,7 @@ export default function AdminDashboard() {
                                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', backgroundColor: 'rgba(255,255,255,0.02)' }}>
                                         <th style={{ padding: '1.25rem 1.5rem', fontWeight: 500 }}>Company Name</th>
                                         <th style={{ padding: '1.25rem 1.5rem', fontWeight: 500 }}>Active Plan</th>
+                                        <th style={{ padding: '1.25rem 1.5rem', fontWeight: 500 }}>Agents Deployed</th>
                                         <th style={{ padding: '1.25rem 1.5rem', fontWeight: 500 }}>Wallet Balance</th>
                                         <th style={{ padding: '1.25rem 1.5rem', fontWeight: 500 }}>Status</th>
                                         <th style={{ padding: '1.25rem 1.5rem', fontWeight: 500, textAlign: 'right' }}>Actions</th>
@@ -255,7 +256,11 @@ export default function AdminDashboard() {
                                                         <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>{client.email}</div>
                                                     </td>
                                                     <td style={{ padding: '1.25rem 1.5rem' }}>
-                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>{client.plan || 'Pro Platform'}</div>
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>{client.plan || 'FREE'}</div>
+                                                    </td>
+                                                    <td style={{ padding: '1.25rem 1.5rem' }}>
+                                                        <div style={{ fontWeight: 600 }}>{client.agents?.length || 0} / {client.plan === 'PRO_PLATFORM' ? 15 : client.plan === 'ENTERPRISE' ? 50 : 5}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Active instances</div>
                                                     </td>
                                                     <td style={{ padding: '1.25rem 1.5rem' }}>
                                                         <div style={{ fontWeight: 600, color: isSuspended ? '#ef4444' : '#22c55e' }}>{client.availableMinutes} mins</div>
