@@ -259,7 +259,7 @@ export default function AdminDashboard() {
                                                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>{client.plan || 'FREE'}</div>
                                                     </td>
                                                     <td style={{ padding: '1.25rem 1.5rem' }}>
-                                                        <div style={{ fontWeight: 600 }}>{client.agents?.length || 0} / {client.plan === 'PRO_PLATFORM' ? 15 : client.plan === 'ENTERPRISE' ? 50 : 5}</div>
+                                                        <div style={{ fontWeight: 600 }}>{Array.isArray(client.agents) ? client.agents.length : 0} / {client.plan === 'PRO_PLATFORM' ? 15 : client.plan === 'ENTERPRISE' ? 50 : 0}</div>
                                                         <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Active instances</div>
                                                     </td>
                                                     <td style={{ padding: '1.25rem 1.5rem' }}>

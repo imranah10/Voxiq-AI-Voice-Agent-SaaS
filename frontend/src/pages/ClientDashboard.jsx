@@ -16,10 +16,10 @@ export default function ClientDashboard() {
 
     // Determine max agents allowed based on plan
     const getMaxAgents = (plan) => {
-        if (!plan || plan === 'FREE') return 5;
+        if (!plan || plan === 'FREE') return 0;
         if (plan === 'PRO_PLATFORM') return 15;
         if (plan === 'ENTERPRISE') return 50;
-        return 5;
+        return 0;
     };
 
     useEffect(() => {
@@ -284,7 +284,7 @@ export default function ClientDashboard() {
                             )}
 
                             <div className="grid-3">
-                                {user.agents && user.agents.length > 0 ? (
+                                {Array.isArray(user?.agents) && user.agents.length > 0 ? (
                                     user.agents.map((agent, index) => (
                                         <div key={index} className="glass-card" style={{ padding: '1.5rem' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
@@ -358,7 +358,7 @@ export default function ClientDashboard() {
 
                         <h3 style={{ fontSize: '1.1rem', marginTop: '3rem', marginBottom: '1rem' }}>Uploaded Files</h3>
 
-                        {user.knowledgeBase && user.knowledgeBase.length > 0 ? (
+                        {Array.isArray(user?.knowledgeBase) && user.knowledgeBase.length > 0 ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {user.knowledgeBase.map((doc, index) => (
                                     <div key={index} className="glass-card" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -432,7 +432,7 @@ export default function ClientDashboard() {
                                     style={{ width: '100%', maxWidth: '400px', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
                                 >
                                     <option value="">-- Choose an Agent to link --</option>
-                                    {user.agents?.map(agent => (
+                                    {Array.isArray(user?.agents) && user.agents.map(agent => (
                                         <option key={agent.assistantId} value={agent.assistantId}>{agent.name}</option>
                                     ))}
                                 </select>

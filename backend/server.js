@@ -43,8 +43,8 @@ app.post('/api/saas/create-agent', auth, async (req, res) => {
     const user = await User.findById(req.user.id);
     const agentCount = user.agents ? user.agents.length : 0;
     
-    if (user.plan === 'FREE' && agentCount >= 5) {
-        return res.status(403).json({ error: "Free Plan allows only 5 Agents. Please upgrade to Pro." });
+    if (!user.plan || user.plan === 'FREE') {
+        return res.status(403).json({ error: "Agent creation is not available on the Free Plan. Please upgrade to Pro or Enterprise to deploy agents." });
     }
     if (user.plan === 'PRO_PLATFORM' && agentCount >= 15) {
         return res.status(403).json({ error: "Pro Plan allows 15 Agents. Please upgrade to Enterprise." });
