@@ -20,7 +20,7 @@ export default function AdminDashboard() {
         const fetchClients = async () => {
             try {
                 const token = localStorage.getItem('voxiq_token');
-                const response = await fetch('http://localhost:5001/api/auth/clients', {
+                const response = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/clients', {
                     headers: { 'x-auth-token': token }
                 });
                 const data = await response.json();
@@ -47,7 +47,7 @@ export default function AdminDashboard() {
         setPassMsg('Updating...');
         try {
             const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('http://localhost:5001/api/auth/update-password', {
+            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/update-password', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
                 body: JSON.stringify({ newPassword })
@@ -69,7 +69,7 @@ export default function AdminDashboard() {
         setAdminMsg('Creating...');
         try {
             const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('http://localhost:5001/api/auth/register-admin', {
+            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/register-admin', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
                 body: JSON.stringify({ email: newAdminEmail, password: newAdminPassword })
@@ -95,7 +95,7 @@ export default function AdminDashboard() {
         setPitchMsg('Initiating call...');
         try {
             const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('http://localhost:5001/api/vapi/demo-outbound', {
+            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/vapi/demo-outbound', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
                 body: JSON.stringify({ prospectPhone, customPrompt })

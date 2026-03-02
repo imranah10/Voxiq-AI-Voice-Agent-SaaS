@@ -14,7 +14,7 @@ export default function AdminAuthPage() {
         setLoading(true);
 
         try {
-            const response = await fetch('http://localhost:5001/api/auth/login', {
+            const response = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...formData, isAdminRoute: true })

@@ -18,7 +18,7 @@ export default function ClientDashboard() {
         const fetchUserData = async () => {
             try {
                 const token = localStorage.getItem('voxiq_token');
-                const response = await fetch('http://localhost:5001/api/auth/me', {
+                const response = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/me', {
                     headers: { 'x-auth-token': token }
                 });
                 const data = await response.json();
@@ -51,7 +51,7 @@ export default function ClientDashboard() {
         setCreatingAgentLoading(true);
         try {
             const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('http://localhost:5001/api/saas/create-agent', {
+            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/saas/create-agent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
                 body: JSON.stringify(agentForm)
@@ -79,7 +79,7 @@ export default function ClientDashboard() {
         formData.append('file', kbFile);
         try {
             const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('http://localhost:5001/api/saas/upload-kb', {
+            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/saas/upload-kb', {
                 method: 'POST',
                 headers: { 'x-auth-token': token },
                 body: formData
