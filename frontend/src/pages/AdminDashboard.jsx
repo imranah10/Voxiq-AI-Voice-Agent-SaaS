@@ -6,6 +6,7 @@ export default function AdminDashboard() {
     const [activeTab, setActiveTab] = useState('overview');
     const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [adminUser, setAdminUser] = useState(null);
     const [newPassword, setNewPassword] = useState('');
     const [passMsg, setPassMsg] = useState('');
     const [newAdminEmail, setNewAdminEmail] = useState('');
@@ -14,13 +15,32 @@ export default function AdminDashboard() {
     const [prospectPhone, setProspectPhone] = useState('');
     const [customPrompt, setCustomPrompt] = useState('');
     const [pitchMsg, setPitchMsg] = useState('');
-    const navigate = useNavigate();
 
+    // Client Edit State
+    const [editingClient, setEditingClient] = useState(null);
+    const [editMsg, setEditMsg] = useState('');
+
+    const navigate = useNavigate();
     useEffect(() => {
-        const fetchClients = async () => {
+        const fetchAdminProfile = async () => {
             try {
-                const token = localStorage.getItem('voxiq_token');
-                const response = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/clients', {
+                const token = localStorage.getItem('voxiq_admin_token');
+                const response = await fetch('http://localhost:5001/api/auth/me', {
+                    headers: { 'x-auth-token': token }
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    setAdminUser(data);
+                }
+            } catch (err) {
+                console.error("Error fetching admin profile:", err);
+            }
+        };
+
+        const fetchInitClients = async () => {
+            try {
+                const token = localStorage.getItem('voxiq_admin_token');
+                const response = await fetch('http://localhost:5001/api/auth/clients', {
                     headers: { 'x-auth-token': token }
                 });
                 const data = await response.json();
@@ -33,12 +53,54 @@ export default function AdminDashboard() {
                 setLoading(false);
             }
         };
-        fetchClients();
+
+        fetchAdminProfile();
+        fetchInitClients();
     }, []);
 
+
+    const fetchClients = async () => {
+        try {
+            const token = localStorage.getItem('voxiq_admin_token');
+            const response = await fetch('http://localhost:5001/api/auth/clients', {
+                headers: { 'x-auth-token': token }
+            });
+            const data = await response.json();
+            if (response.ok) {
+                setClients(data);
+            }
+        } catch (err) {
+            console.error("Error fetching clients:", err);
+        }
+    };
+
+    const handleInjectFunds = async () => {
+        const amtStr = window.prompt("Enter demo funds to inject into Sandbox (INR):", "500");
+        if (!amtStr) return;
+        const amount = Number(amtStr);
+        if (isNaN(amount) || amount <= 0) return alert('Invalid amount.');
+        try {
+            const token = localStorage.getItem('voxiq_admin_token');
+            const res = await fetch('http://localhost:5001/api/auth/recharge', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+                body: JSON.stringify({ amount })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setAdminUser(prev => ({ ...prev, walletBalance: data.walletBalance }));
+                alert(`Loaded ₹${amount} into Sandbox. Current Balance: ₹${data.walletBalance}`);
+            } else {
+                alert(data.error || 'Failed to inject funds');
+            }
+        } catch (err) {
+            alert('Error connecting to backend.');
+        }
+    };
+
     const handleLogout = () => {
-        localStorage.removeItem('voxiq_token');
-        localStorage.removeItem('voxiq_user');
+        localStorage.removeItem('voxiq_admin_token');
+        localStorage.removeItem('voxiq_admin_user');
         navigate('/hq-admin-secure');
     };
 
@@ -46,8 +108,8 @@ export default function AdminDashboard() {
         e.preventDefault();
         setPassMsg('Updating...');
         try {
-            const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/update-password', {
+            const token = localStorage.getItem('voxiq_admin_token');
+            const res = await fetch('http://localhost:5001/api/auth/update-password', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
                 body: JSON.stringify({ newPassword })
@@ -68,8 +130,8 @@ export default function AdminDashboard() {
         e.preventDefault();
         setAdminMsg('Creating...');
         try {
-            const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/register-admin', {
+            const token = localStorage.getItem('voxiq_admin_token');
+            const res = await fetch('http://localhost:5001/api/auth/register-admin', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
                 body: JSON.stringify({ email: newAdminEmail, password: newAdminPassword })
@@ -87,6 +149,56 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleSuspendClient = async () => {
+        const newStatus = editingClient.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+        setEditMsg(newStatus === 'ACTIVE' ? 'Activating account...' : 'Suspending account...');
+        try {
+            const token = localStorage.getItem('voxiq_admin_token');
+            const res = await fetch(`http://localhost:5001/api/auth/client/${editingClient._id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+                body: JSON.stringify({ status: newStatus })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setEditMsg(`Client successfully ${newStatus.toLowerCase()}!`);
+                fetchClients();
+                setEditingClient({ ...editingClient, status: newStatus });
+                setTimeout(() => setEditMsg(''), 2000);
+            } else {
+                setEditMsg(data.error || `Failed to update status`);
+            }
+        } catch (err) {
+            setEditMsg('Error connecting to backend.');
+        }
+    };
+
+    const handleDeleteClient = async () => {
+        if (!window.confirm("Are you sure you want to permanently delete this client? This cannot be undone.")) return;
+
+        setEditMsg('Deleting client...');
+        try {
+            const token = localStorage.getItem('voxiq_admin_token');
+            const res = await fetch(`http://localhost:5001/api/auth/client/${editingClient._id}`, {
+                method: 'DELETE',
+                headers: { 'x-auth-token': token }
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setEditMsg('Client deleted.');
+                fetchClients(); // Refresh list
+                setTimeout(() => {
+                    setEditingClient(null);
+                    setEditMsg('');
+                }, 1500);
+            } else {
+                setEditMsg(data.error || 'Failed to delete client');
+            }
+        } catch (err) {
+            setEditMsg('Error connecting to backend.');
+        }
+    };
+
     const handleInitiateDemo = async () => {
         if (!prospectPhone) {
             setPitchMsg('Please enter a prospect phone number.');
@@ -94,8 +206,8 @@ export default function AdminDashboard() {
         }
         setPitchMsg('Initiating call...');
         try {
-            const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/vapi/demo-outbound', {
+            const token = localStorage.getItem('voxiq_admin_token');
+            const res = await fetch('http://localhost:5001/api/vapi/demo-outbound', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
                 body: JSON.stringify({ prospectPhone, customPrompt })
@@ -256,10 +368,10 @@ export default function AdminDashboard() {
                                                         <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>{client.email}</div>
                                                     </td>
                                                     <td style={{ padding: '1.25rem 1.5rem' }}>
-                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>{client.plan || 'FREE'}</div>
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>{client.plan || 'STARTER'}</div>
                                                     </td>
                                                     <td style={{ padding: '1.25rem 1.5rem' }}>
-                                                        <div style={{ fontWeight: 600 }}>{Array.isArray(client.agents) ? client.agents.length : 0} / {client.plan === 'PRO_PLATFORM' ? 15 : client.plan === 'ENTERPRISE' ? 50 : 0}</div>
+                                                        <div style={{ fontWeight: 600 }}>{Array.isArray(client.agents) ? client.agents.length : 0} / {client.plan === 'PRO' ? 15 : client.plan === 'ENTERPRISE' ? 50 : 5}</div>
                                                         <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Active instances</div>
                                                     </td>
                                                     <td style={{ padding: '1.25rem 1.5rem' }}>
@@ -275,7 +387,12 @@ export default function AdminDashboard() {
                                                         </div>
                                                     </td>
                                                     <td style={{ padding: '1.25rem 1.5rem', textAlign: 'right' }}>
-                                                        <button style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', padding: '0.25rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}>Manage</button>
+                                                        <button
+                                                            onClick={() => setEditingClient(client)}
+                                                            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', padding: '0.25rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', transition: 'background 0.2s' }}
+                                                        >
+                                                            Manage
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             );
@@ -285,205 +402,297 @@ export default function AdminDashboard() {
                             </table>
                         </div>
                     </div>
-                )}
+                )
+                }
 
                 {/* Demo Engine for pitches: Outbound Call */}
-                {activeTab === 'demo-outbound' && (
-                    <div className="grid-2">
-                        <div className="glass-card">
-                            <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>Live Demo Pitch Engine</h2>
-                            <p style={{ color: '#94a3b8', marginBottom: '2rem', fontSize: '0.875rem' }}>Secretly trigger an outbound call to a prospect's real phone number directly from Vapi API logic to showcase product capabilities.</p>
+                {
+                    activeTab === 'demo-outbound' && (
+                        <div className="grid-2">
+                            <div className="glass-card">
+                                <h2 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>Live Demo Pitch Engine</h2>
+                                <p style={{ color: '#94a3b8', marginBottom: '2rem', fontSize: '0.875rem' }}>Secretly trigger an outbound call to a prospect's real phone number directly from Vapi API logic to showcase product capabilities.</p>
 
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Target Prospect Phone Number</label>
-                                <input
-                                    type="text"
-                                    placeholder="+919876543210"
-                                    style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                                    value={prospectPhone}
-                                    onChange={(e) => setProspectPhone(e.target.value)}
-                                />
-                            </div>
-
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Custom Agent Identity (System Prompt Override)</label>
-                                <textarea
-                                    rows="4"
-                                    placeholder="You are a sales rep for [Prospect Company Name]... Speak professionally."
-                                    style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                                    value={customPrompt}
-                                    onChange={(e) => setCustomPrompt(e.target.value)}
-                                ></textarea>
-                            </div>
-
-                            {pitchMsg && (
-                                <div style={{ padding: '0.75rem', background: pitchMsg.includes('ringing') ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: pitchMsg.includes('ringing') ? '#22c55e' : '#ef4444', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
-                                    {pitchMsg}
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Target Prospect Phone Number</label>
+                                    <input
+                                        type="text"
+                                        placeholder="+919876543210"
+                                        style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                                        value={prospectPhone}
+                                        onChange={(e) => setProspectPhone(e.target.value)}
+                                    />
                                 </div>
-                            )}
 
-                            <button onClick={handleInitiateDemo} className="primary" style={{ width: '100%', justifyContent: 'center', background: 'linear-gradient(135deg, #ef4444, #dc2626)', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.4)' }}>
-                                Initiate Instant Demo Call (₹5 cost)
-                            </button>
-                            <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', marginTop: '1rem' }}>Call uses Super Admin Wallet Balance</p>
-                        </div>
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Custom Agent Identity (System Prompt Override)</label>
+                                    <textarea
+                                        rows="4"
+                                        placeholder="You are a sales rep for [Prospect Company Name]... Speak professionally."
+                                        style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                                        value={customPrompt}
+                                        onChange={(e) => setCustomPrompt(e.target.value)}
+                                    ></textarea>
+                                </div>
 
-                        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(21, 24, 33, 0.4)' }}>
-                            <Presentation size={48} color="#94a3b8" style={{ marginBottom: '1rem' }} />
-                            <h3 style={{ color: '#fff', marginBottom: '0.5rem' }}>Pitch Live</h3>
-                            <p style={{ color: '#94a3b8', textAlign: 'center', maxWidth: '300px' }}>This tool is specifically designed for the Founder to close B2B enterprise deals on sales calls.</p>
+                                {pitchMsg && (
+                                    <div style={{ padding: '0.75rem', background: pitchMsg.includes('ringing') ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: pitchMsg.includes('ringing') ? '#22c55e' : '#ef4444', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+                                        {pitchMsg}
+                                    </div>
+                                )}
+
+                                <button onClick={handleInitiateDemo} className="primary" style={{ width: '100%', justifyContent: 'center', background: 'linear-gradient(135deg, #ef4444, #dc2626)', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.4)' }}>
+                                    Initiate Instant Demo Call (₹5 cost)
+                                </button>
+                                <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', marginTop: '1rem' }}>Call uses Super Admin Wallet Balance</p>
+                            </div>
+
+                            <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(21, 24, 33, 0.4)' }}>
+                                <Presentation size={48} color="#94a3b8" style={{ marginBottom: '1rem' }} />
+                                <h3 style={{ color: '#fff', marginBottom: '0.5rem' }}>Pitch Live</h3>
+                                <p style={{ color: '#94a3b8', textAlign: 'center', maxWidth: '300px' }}>This tool is specifically designed for the Founder to close B2B enterprise deals on sales calls.</p>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )
+                }
 
                 {/* Demo Engine for pitches: Call Routing (BYON) */}
-                {activeTab === 'demo-routing' && (
-                    <div>
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '2rem' }}>Live Pitch: Call Routing Demo</h2>
-                        <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>Show clients exactly how they can connect their existing phone numbers to the AI Agents without buying new ones.</p>
+                {
+                    activeTab === 'demo-routing' && (
+                        <div>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '2rem' }}>Live Pitch: Call Routing Demo</h2>
+                            <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>Show clients exactly how they can connect their existing phone numbers to the AI Agents without buying new ones.</p>
 
-                        <div className="glass-card" style={{ borderTop: '4px solid #ef4444', padding: '2rem', position: 'relative', overflow: 'hidden' }}>
-                            <div style={{ position: 'absolute', top: 0, right: 0, background: '#ef4444', color: '#fff', fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 1rem', borderBottomLeftRadius: '8px', textTransform: 'uppercase' }}>Demo View</div>
+                            <div className="glass-card" style={{ borderTop: '4px solid #ef4444', padding: '2rem', position: 'relative', overflow: 'hidden' }}>
+                                <div style={{ position: 'absolute', top: 0, right: 0, background: '#ef4444', color: '#fff', fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 1rem', borderBottomLeftRadius: '8px', textTransform: 'uppercase' }}>Demo View</div>
 
-                            <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Connect Your Business Number</h3>
-                            <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '2rem', lineHeight: '1.6' }}>
-                                You do not need to buy a new number from us. Keep your existing brand identity.
-                                Simply use <strong>Unconditional Call Forwarding</strong> from your current telecom provider (AirTel, Jio, AT&T, etc.)
-                                to point your customers to your AI Agent's specific backend SIP line.
-                            </p>
+                                <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Connect Your Business Number</h3>
+                                <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '2rem', lineHeight: '1.6' }}>
+                                    You do not need to buy a new number from us. Keep your existing brand identity.
+                                    Simply use <strong>Unconditional Call Forwarding</strong> from your current telecom provider (AirTel, Jio, AT&T, etc.)
+                                    to point your customers to your AI Agent's specific backend SIP line.
+                                </p>
 
-                            <div style={{ marginBottom: '2rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.5rem', color: '#94a3b8' }}>Step 1: Select Your AI Agent</label>
-                                <select disabled style={{ width: '100%', maxWidth: '400px', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', opacity: 0.7 }}>
-                                    <option value="">[Demo Agent] Sales Representative</option>
-                                </select>
-                            </div>
+                                <div style={{ marginBottom: '2rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.5rem', color: '#94a3b8' }}>Step 1: Select Your AI Agent</label>
+                                    <select disabled style={{ width: '100%', maxWidth: '400px', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', opacity: 0.7 }}>
+                                        <option value="">[Demo Agent] Sales Representative</option>
+                                    </select>
+                                </div>
 
-                            <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '1.5rem', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)', marginBottom: '1.5rem' }}>
-                                <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Step 2: Forward calls to your dedicated AI server number:</div>
-                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#ef4444', letterSpacing: '1px' }}>+1 (555) 992-VOXIQ</div>
-                            </div>
+                                <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '1.5rem', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)', marginBottom: '1.5rem' }}>
+                                    <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Step 2: Forward calls to your dedicated AI server number:</div>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#ef4444', letterSpacing: '1px' }}>+1 (555) 992-VOXIQ</div>
+                                </div>
 
-                            <div style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
-                                <h4 style={{ marginBottom: '0.5rem' }}>How to setup Call Forwarding?</h4>
-                                <ul style={{ margin: 0, paddingLeft: '1.5rem', color: '#94a3b8', fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <li>Dial <strong>**21*+15559928694#</strong> from your mobile phone (India/Asia standard).</li>
-                                    <li>Or contact your Toll-Free provider (Exotel/Tata) to route the SIP trunk.</li>
-                                    <li>If a customer dials your actual business number, they will instantly hear your AI Agent.</li>
-                                </ul>
+                                <div style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                                    <h4 style={{ marginBottom: '0.5rem' }}>How to setup Call Forwarding?</h4>
+                                    <ul style={{ margin: 0, paddingLeft: '1.5rem', color: '#94a3b8', fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        <li>Dial <strong>**21*+15559928694#</strong> from your mobile phone (India/Asia standard).</li>
+                                        <li>Or contact your Toll-Free provider (Exotel/Tata) to route the SIP trunk.</li>
+                                        <li>If a customer dials your actual business number, they will instantly hear your AI Agent.</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )
+                }
 
                 {/* Demo Engine for pitches: Admin Wallet */}
-                {activeTab === 'demo-wallet' && (
-                    <div>
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '2rem' }}>Admin Demo Wallet</h2>
-                        <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>Manage your personal admin account balance to fund live demonstrations and outbound testing.</p>
+                {
+                    activeTab === 'demo-wallet' && (
+                        <div>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '2rem' }}>Admin Demo Wallet</h2>
+                            <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>Manage your personal admin account balance to fund live demonstrations and outbound testing.</p>
 
-                        <div className="grid-2">
-                            <div className="glass-card" style={{ background: 'linear-gradient(135deg, rgba(21, 24, 33, 0.9), rgba(239, 68, 68, 0.1))' }}>
-                                <h3 style={{ color: '#94a3b8', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>Current Plan</h3>
-                                <div style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>Admin Sandbox</div>
-                                <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>Internal testing and client pitches</p>
+                            <div className="grid-2">
+                                <div className="glass-card" style={{ background: 'linear-gradient(135deg, rgba(21, 24, 33, 0.9), rgba(239, 68, 68, 0.1))' }}>
+                                    <h3 style={{ color: '#94a3b8', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>Current Plan</h3>
+                                    <div style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>Admin Sandbox</div>
+                                    <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>Internal testing and client pitches</p>
 
-                                <h3 style={{ color: '#94a3b8', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>Remaining Demo Minutes</h3>
-                                <div style={{ fontSize: '3rem', fontWeight: 800, color: '#ef4444', marginBottom: '1rem' }}>450 <span style={{ fontSize: '1rem', color: '#94a3b8', fontWeight: 400 }}> / 500 mins</span></div>
+                                    <h3 style={{ color: '#94a3b8', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>Remaining Demo Minutes</h3>
+                                    <div style={{ fontSize: '3rem', fontWeight: 800, color: '#ef4444', marginBottom: '1rem' }}>{adminUser?.availableMinutes || 0} <span style={{ fontSize: '1rem', color: '#94a3b8', fontWeight: 400 }}> / 500 mins</span></div>
 
-                                <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                                    <div style={{ width: '90%', height: '100%', background: '#ef4444', borderRadius: '4px' }}></div>
-                                </div>
-                            </div>
-
-                            <div className="glass-card">
-                                <h3 style={{ marginBottom: '1rem' }}>Pre-Paid Wallet</h3>
-                                <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '2rem' }}>Since you are the admin, you can manually inject test funds into your wallet to cover actual Vapi API costs during pitches.</p>
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', marginBottom: '2rem' }}>
-                                    <span style={{ color: '#94a3b8' }}>Wallet Balance</span>
-                                    <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>₹2,500.00</span>
+                                    <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                                        <div style={{ width: '90%', height: '100%', background: '#ef4444', borderRadius: '4px' }}></div>
+                                    </div>
                                 </div>
 
-                                <button className="primary" style={{ width: '100%', justifyContent: 'center', background: '#eab308', color: '#000', border: 'none' }}>Inject Demo Funds (Admin Only)</button>
+                                <div className="glass-card">
+                                    <h3 style={{ marginBottom: '1rem' }}>Pre-Paid Wallet</h3>
+                                    <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '2rem' }}>Since you are the admin, you can manually inject test funds into your wallet to cover actual Vapi API costs during pitches.</p>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', marginBottom: '2rem' }}>
+                                        <span style={{ color: '#94a3b8' }}>Wallet Balance</span>
+                                        <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>₹{(adminUser?.walletBalance || 0).toFixed(2)}</span>
+                                    </div>
+
+                                    <button onClick={handleInjectFunds} className="primary" style={{ width: '100%', justifyContent: 'center', background: '#eab308', color: '#000', border: 'none' }}>Inject Demo Funds (Admin Only)</button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )
+                }
 
                 {/* HQ Settings */}
-                {activeTab === 'settings' && (
-                    <div className="glass-card" style={{ maxWidth: '600px' }}>
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Settings size={24} color="#ef4444" /> Security Settings
-                        </h2>
+                {
+                    activeTab === 'settings' && (
+                        <div className="glass-card" style={{ maxWidth: '600px' }}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Settings size={24} color="#ef4444" /> Security Settings
+                            </h2>
 
-                        <form onSubmit={handleChangePassword}>
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Change Master Password</label>
-                                <input
-                                    type="password"
-                                    placeholder="Enter new strong password"
-                                    required
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                                />
-                            </div>
-
-                            {passMsg && (
-                                <div style={{ padding: '0.75rem', background: passMsg.includes('success') ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: passMsg.includes('success') ? '#22c55e' : '#ef4444', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.875rem' }}>
-                                    {passMsg}
+                            <form onSubmit={handleChangePassword}>
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Change Master Password</label>
+                                    <input
+                                        type="password"
+                                        placeholder="Enter new strong password"
+                                        required
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                                    />
                                 </div>
-                            )}
 
-                            <button type="submit" className="primary" style={{ background: '#ef4444' }}>Update Master Password</button>
-                        </form>
+                                {passMsg && (
+                                    <div style={{ padding: '0.75rem', background: passMsg.includes('success') ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: passMsg.includes('success') ? '#22c55e' : '#ef4444', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.875rem' }}>
+                                        {passMsg}
+                                    </div>
+                                )}
 
-                        <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '3rem 0' }} />
+                                <button type="submit" className="primary" style={{ background: '#ef4444' }}>Update Master Password</button>
+                            </form>
 
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <ShieldAlert size={24} color="#6366f1" /> Create New Super Admin
-                        </h2>
-                        <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '2rem' }}>Grant full HQ access to another founder or team member. They will share the Master Demo Wallet.</p>
+                            <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '3rem 0' }} />
 
-                        <form onSubmit={handleCreateAdmin}>
-                            <div style={{ marginBottom: '1rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>New Admin Email</label>
-                                <input
-                                    type="email"
-                                    placeholder="partner@voxiq.ai"
-                                    required
-                                    value={newAdminEmail}
-                                    onChange={(e) => setNewAdminEmail(e.target.value)}
-                                    style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                                />
-                            </div>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <ShieldAlert size={24} color="#6366f1" /> Create New Super Admin
+                            </h2>
+                            <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '2rem' }}>Grant full HQ access to another founder or team member. They will share the Master Demo Wallet.</p>
 
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Initial Password</label>
-                                <input
-                                    type="password"
-                                    placeholder="Temprorary Password"
-                                    required
-                                    value={newAdminPassword}
-                                    onChange={(e) => setNewAdminPassword(e.target.value)}
-                                    style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
-                                />
-                            </div>
-
-                            {adminMsg && (
-                                <div style={{ padding: '0.75rem', background: adminMsg.includes('success') ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: adminMsg.includes('success') ? '#22c55e' : '#ef4444', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.875rem' }}>
-                                    {adminMsg}
+                            <form onSubmit={handleCreateAdmin}>
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>New Admin Email</label>
+                                    <input
+                                        type="email"
+                                        placeholder="partner@voxiq.ai"
+                                        required
+                                        value={newAdminEmail}
+                                        onChange={(e) => setNewAdminEmail(e.target.value)}
+                                        style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                                    />
                                 </div>
-                            )}
 
-                            <button type="submit" className="primary" style={{ background: '#6366f1' }}>Register New Admin</button>
-                        </form>
-                    </div>
-                )}
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Initial Password</label>
+                                    <input
+                                        type="password"
+                                        placeholder="Temprorary Password"
+                                        required
+                                        value={newAdminPassword}
+                                        onChange={(e) => setNewAdminPassword(e.target.value)}
+                                        style={{ width: '100%', padding: '0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}
+                                    />
+                                </div>
 
-            </main>
-        </div>
+                                {adminMsg && (
+                                    <div style={{ padding: '0.75rem', background: adminMsg.includes('success') ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: adminMsg.includes('success') ? '#22c55e' : '#ef4444', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.875rem' }}>
+                                        {adminMsg}
+                                    </div>
+                                )}
+
+                                <button type="submit" className="primary" style={{ background: '#6366f1' }}>Register New Admin</button>
+                            </form>
+                        </div>
+                    )
+                }
+
+                {/* Edit Client Modal Overlay */}
+                {
+                    editingClient && (
+                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, WebkitBackdropFilter: 'blur(5px)', backdropFilter: 'blur(5px)' }}>
+                            <div className="glass-card" style={{ width: '95%', maxWidth: '600px', backgroundColor: '#11131a', border: '1px solid rgba(255,255,255,0.1)', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', position: 'sticky', top: 0, background: '#11131a', paddingBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', zIndex: 10 }}>
+                                    <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Client Profile Overview</h2>
+                                    <button onClick={() => setEditingClient(null)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', cursor: 'pointer', fontSize: '1.25rem', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}>&times;</button>
+                                </div>
+
+                                <div style={{ marginBottom: '1.5rem', padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+                                        <div style={{ flex: '1 1 auto', minWidth: '200px' }}>
+                                            <div style={{ fontWeight: 700, fontSize: '1.25rem', color: '#fff', marginBottom: '0.25rem', wordBreak: 'break-word' }}>{editingClient.companyName}</div>
+                                            <div style={{ fontSize: '0.875rem', color: '#94a3b8', wordBreak: 'break-all' }}>{editingClient.email}</div>
+                                        </div>
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', padding: '0.25rem 0.75rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                            {editingClient.plan || 'STARTER'} PLAN
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1.5rem' }}>
+                                        <div style={{ flex: '1 1 120px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Account Status</div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: editingClient.status === 'SUSPENDED' ? '#ef4444' : '#22c55e', fontWeight: 600 }}>
+                                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: editingClient.status === 'SUSPENDED' ? '#ef4444' : '#22c55e' }}></div>
+                                                {editingClient.status || 'ACTIVE'}
+                                            </div>
+                                        </div>
+                                        <div style={{ flex: '1 1 120px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Location</div>
+                                            <div style={{ color: '#f8fafc' }}>{editingClient.location || 'Unknown'}</div>
+                                        </div>
+                                        <div style={{ flex: '1 1 120px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Joined Date</div>
+                                            <div style={{ color: '#f8fafc' }}>{new Date(editingClient.createdAt).toLocaleDateString()}</div>
+                                        </div>
+                                        <div style={{ flex: '1 1 120px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Active Agents</div>
+                                            <div style={{ color: '#f8fafc' }}>{editingClient.agents?.length || 0} Deployed</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
+                                    <div style={{ flex: '1 1 200px', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Available Minutes</div>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#f8fafc' }}>{editingClient.availableMinutes || 0} mins</div>
+                                    </div>
+                                    <div style={{ flex: '1 1 200px', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Wallet Balance</div>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#f8fafc' }}>₹{editingClient.walletBalance || 0}</div>
+                                    </div>
+                                </div>
+
+                                {editMsg && (
+                                    <div style={{ padding: '0.75rem', background: editMsg.includes('success') ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: editMsg.includes('success') ? '#22c55e' : '#ef4444', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+                                        {editMsg}
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
+                                    <button
+                                        onClick={handleDeleteClient}
+                                        style={{ padding: '0.75rem 1.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, transition: '0.2s', flex: '1 1 auto', textAlign: 'center' }}
+                                    >
+                                        Delete Account
+                                    </button>
+
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', flex: '2 1 auto', justifyContent: 'flex-end' }}>
+                                        <button onClick={() => setEditingClient(null)} style={{ padding: '0.75rem 1.5rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', cursor: 'pointer', flex: '1 1 auto' }}>Close</button>
+                                        <button
+                                            onClick={handleSuspendClient}
+                                            style={{ padding: '0.75rem 1.5rem', background: editingClient.status === 'SUSPENDED' ? '#22c55e' : '#eab308', border: 'none', color: '#111', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, flex: '1 1 auto' }}
+                                        >
+                                            {editingClient.status === 'SUSPENDED' ? 'Activate Account' : 'Suspend Account'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
+            </main >
+        </div >
     );
 }

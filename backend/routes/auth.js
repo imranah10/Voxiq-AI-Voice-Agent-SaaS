@@ -2,9 +2,19 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const Otp = require('../models/Otp');
 const auth = require('../middleware/auth');
+
+// Setup Nodemailer Transporter
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // You can change this to 'SendGrid', 'SES', etc.
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
 
 // GET /api/auth/me
 router.get('/me', auth, async (req, res) => {
@@ -25,6 +35,52 @@ router.get('/clients', auth, async (req, res) => {
     }
     const clients = await User.find({ role: 'CLIENT' }).select('-password');
     res.json(clients);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// PUT /api/auth/client/:id (Admin Only)
+router.put('/client/:id', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMIN') {
+        return res.status(403).json({ error: 'Access denied. Admin only.' });
+    }
+    
+    const { status } = req.body;
+    
+    let client = await User.findById(req.params.id);
+    if (!client) {
+        return res.status(404).json({ error: 'Client not found' });
+    }
+
+    if (status !== undefined) client.status = status;
+
+    await client.save();
+    res.json({ message: 'Client status updated successfully', client });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// DELETE /api/auth/client/:id (Admin Only)
+router.delete('/client/:id', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMIN') {
+        return res.status(403).json({ error: 'Access denied. Admin only.' });
+    }
+    
+    const client = await User.findById(req.params.id);
+    if (!client) {
+        return res.status(404).json({ error: 'Client not found' });
+    }
+
+    // In a real production app, also trigger deletion of Vapi Agents via Vapi API here
+    await User.findByIdAndDelete(req.params.id);
+
+    res.json({ message: 'Client permanently deleted.' });
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
@@ -53,22 +109,135 @@ router.post('/send-otp', async (req, res) => {
     const newOtp = new Otp({ email, otp: generatedOtp });
     await newOtp.save();
 
-    // ** FOR TESTING: PRINT OTP TO CONSOLE AND RETURN IT ** 
-    // Later, connect Nodemailer/Resend here
-    console.log(`\n\n======================================`);
-    console.log(`🚨 DEVELOPMENT ONLY: Simulated Email`);
-    console.log(`To: ${email}`);
-    console.log(`Your Voxiq Verification Code is: ${generatedOtp}`);
-    console.log(`======================================\n\n`);
+    // Check if Email credentials are set up
+    const isEmailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
 
-    res.status(200).json({ 
-        message: 'OTP sent! (Test Mode Active)', 
-        testOtp: generatedOtp // Sending to frontend for testing
-    });
+    if (isEmailConfigured) {
+        // Send actual email via Nodemailer
+        try {
+            console.log(`Attempting to send real email to ${email} using ${process.env.EMAIL_USER}...`);
+            const mailOptions = {
+                from: `"Voxiq HQ" <${process.env.EMAIL_USER}>`,
+                to: email,
+                subject: 'Your Voxiq Verification Code',
+                html: `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                        <h2 style="color: #6366f1; text-align: center;">Voxiq</h2>
+                        <h3 style="color: #333; text-align: center;">Email Verification</h3>
+                        <p style="color: #475569; font-size: 16px;">Hello,</p>
+                        <p style="color: #475569; font-size: 16px;">Please use the following 6-digit verification code to complete your registration. This code will expire in 10 minutes.</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <span style="display: inline-block; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #111; background: #f1f5f9; padding: 15px 30px; border-radius: 8px;">${generatedOtp}</span>
+                        </div>
+                        <p style="color: #94a3b8; font-size: 14px; text-align: center;">If you didn't request this code, you can safely ignore this email.</p>
+                    </div>
+                `
+            };
+            await transporter.sendMail(mailOptions);
+            res.status(200).json({ message: 'Verification code sent to your email.' });
+        } catch (emailError) {
+            console.error("Failed to send email:", emailError);
+            res.status(500).json({ error: 'Failed to send verification email. Please try again.' });
+        }
+    } else {
+        // ** FOR TESTING: PRINT OTP TO CONSOLE AND RETURN IT ** 
+        console.log(`\n\n======================================`);
+        console.log(`🚨 DEVELOPMENT ONLY: Simulated Email`);
+        console.log(`To: ${email}`);
+        console.log(`Your Voxiq Verification Code is: ${generatedOtp}`);
+        console.log(`WARNING: process.env.EMAIL_USER and EMAIL_PASS are not set.`);
+        console.log(`======================================\n\n`);
+
+        res.status(200).json({ 
+            message: 'OTP logged to console! (Test Mode Active)', 
+            testOtp: generatedOtp // Sending to frontend for testing
+        });
+    }
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server Error');
   }
+});
+
+// PUT /api/auth/select-plan (For clients saving their selected plan after registration)
+router.put('/select-plan', auth, async (req, res) => {
+    try {
+        const { planName } = req.body;
+        
+        let user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const formattedPlan = planName.toUpperCase();
+        if (!['STARTER', 'PRO', 'ENTERPRISE'].includes(formattedPlan)) {
+            return res.status(400).json({ error: 'Invalid plan selected' });
+        }
+
+        let allocatedMinutes = 0;
+        if (formattedPlan === 'STARTER') allocatedMinutes = 100;
+        if (formattedPlan === 'PRO') allocatedMinutes = 500;
+        if (formattedPlan === 'ENTERPRISE') allocatedMinutes = 1500;
+
+        user.plan = formattedPlan;
+        user.hasSelectedPlan = true;
+        user.availableMinutes = allocatedMinutes;
+        await user.save();
+
+        // Regenerate JWT to include updated state
+        const payload = { user: { id: user.id, role: user.role, hasSelectedPlan: user.hasSelectedPlan } };
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+        // Send Plan Confirmation Email
+        const isEmailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+        if (isEmailConfigured) {
+            try {
+                const mailOptions = {
+                    from: `"Voxiq HQ" <${process.env.EMAIL_USER}>`,
+                    to: user.email,
+                    subject: `Welcome to Voxiq ${formattedPlan}!`,
+                    html: `
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <h2 style="color: #6366f1; text-align: center;">Voxiq</h2>
+                            <h3 style="color: #333; text-align: center;">Plan Upgraded Successfully</h3>
+                            <p style="color: #475569; font-size: 16px;">Hello ${user.companyName},</p>
+                            <p style="color: #475569; font-size: 16px;">This email is to confirm that you have successfully selected the <strong>${formattedPlan}</strong> plan.</p>
+                            <p style="color: #475569; font-size: 16px;">You can now log in to your dashboard to start creating your AI agents, uploading knowledge bases, and deploying them to your business lines.</p>
+                            <div style="text-align: center; margin: 30px 0;">
+                                <a href="${process.env.FRONTEND_URL}/dashboard" style="display: inline-block; background: #6366f1; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: bold;">Go to Dashboard</a>
+                            </div>
+                            <p style="color: #94a3b8; font-size: 14px; text-align: center;">Thank you for choosing Voxiq!</p>
+                        </div>
+                    `
+                };
+                transporter.sendMail(mailOptions).catch(err => console.error("Failed to send plan confirmation email:", err));
+            } catch (err) {
+                console.error("Error setting up email:", err);
+            }
+        }
+
+        res.json({ token, user: { id: user.id, companyName: user.companyName, role: user.role, hasSelectedPlan: true, plan: formattedPlan, availableMinutes: user.availableMinutes } });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// PUT /api/auth/recharge (Simulate Razorpay/Stripe payment for Wallet)
+router.put('/recharge', auth, async (req, res) => {
+    try {
+        const { amount } = req.body;
+        if (!amount || amount <= 0) return res.status(400).json({ error: 'Invalid recharge amount' });
+
+        let user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        user.walletBalance += Number(amount);
+        await user.save();
+
+        res.json({ message: 'Wallet recharged successfully', walletBalance: user.walletBalance });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
 });
 
 // POST /api/auth/register
@@ -110,10 +279,10 @@ router.post('/register', async (req, res) => {
     await Otp.deleteOne({ email, otp });
 
     // 5. Generate JWT
-    const payload = { user: { id: user.id, role: user.role } };
+    const payload = { user: { id: user.id, role: user.role, hasSelectedPlan: user.hasSelectedPlan } };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-    res.status(201).json({ token, user: { id: user.id, companyName: user.companyName, role: user.role } });
+    res.status(201).json({ token, user: { id: user.id, companyName: user.companyName, role: user.role, hasSelectedPlan: user.hasSelectedPlan } });
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server Error');
@@ -172,10 +341,10 @@ router.post('/login', async (req, res) => {
     }
 
     // 4. Generate JWT
-    const payload = { user: { id: user.id, role: user.role } };
+    const payload = { user: { id: user.id, role: user.role, hasSelectedPlan: user.hasSelectedPlan } };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-    res.json({ token, user: { id: user.id, companyName: user.companyName, role: user.role, walletBalance: user.walletBalance, availableMinutes: user.availableMinutes } });
+    res.json({ token, user: { id: user.id, companyName: user.companyName, role: user.role, walletBalance: user.walletBalance, availableMinutes: user.availableMinutes, hasSelectedPlan: user.hasSelectedPlan } });
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server Error');

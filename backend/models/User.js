@@ -19,6 +19,15 @@ const UserSchema = new mongoose.Schema({
     enum: ['ADMIN', 'CLIENT'],
     default: 'CLIENT'
   },
+  location: {
+    type: String,
+    default: 'Unknown'
+  },
+  status: {
+    type: String,
+    enum: ['ACTIVE', 'SUSPENDED'],
+    default: 'ACTIVE'
+  },
   // Wallet & Billing State
   walletBalance: {
     type: Number,
@@ -30,8 +39,19 @@ const UserSchema = new mongoose.Schema({
   },
   plan: {
     type: String,
-    enum: ['FREE', 'PRO_PLATFORM', 'ENTERPRISE'],
-    default: 'FREE'
+    enum: ['STARTER', 'PRO', 'ENTERPRISE'],
+    default: 'STARTER'
+  },
+  planStartDate: {
+    type: Date,
+    default: Date.now
+  },
+  planExpiryDate: {
+    type: Date
+  },
+  hasSelectedPlan: {
+    type: Boolean,
+    default: false
   },
   // Voice Agent Configs
   agents: [{

@@ -16,17 +16,17 @@ export default function ClientDashboard() {
 
     // Determine max agents allowed based on plan
     const getMaxAgents = (plan) => {
-        if (!plan || plan === 'FREE') return 0;
-        if (plan === 'PRO_PLATFORM') return 15;
+        if (!plan || plan === 'STARTER') return 5;
+        if (plan === 'PRO') return 15;
         if (plan === 'ENTERPRISE') return 50;
-        return 0;
+        return 5;
     };
 
     useEffect(() => {
         const fetchUserData = async () => {
             try {
                 const token = localStorage.getItem('voxiq_token');
-                const response = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/me', {
+                const response = await fetch('http://localhost:5001/api/auth/me', {
                     headers: { 'x-auth-token': token }
                 });
                 const data = await response.json();
@@ -54,12 +54,40 @@ export default function ClientDashboard() {
         navigate('/auth');
     };
 
+    const handleRecharge = async () => {
+        const amtStr = window.prompt("Enter amount to recharge in INR (e.g., 2500):", "1000");
+        if (!amtStr) return;
+        const amount = Number(amtStr);
+        if (isNaN(amount) || amount <= 0) {
+            alert('Please enter a valid amount.');
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('voxiq_token');
+            const res = await fetch('http://localhost:5001/api/auth/recharge', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+                body: JSON.stringify({ amount })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setUser(prev => ({ ...prev, walletBalance: data.walletBalance }));
+                alert(`Successfully recharged ₹${amount}! Wallet Balance: ₹${data.walletBalance}`);
+            } else {
+                alert(data.error || 'Recharge failed.');
+            }
+        } catch (err) {
+            alert('Server error during recharge.');
+        }
+    };
+
     const handleCreateAgentSubmit = async (e) => {
         e.preventDefault();
         setCreatingAgentLoading(true);
         try {
             const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/saas/create-agent', {
+            const res = await fetch('http://localhost:5001/api/saas/create-agent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
                 body: JSON.stringify(agentForm)
@@ -87,7 +115,7 @@ export default function ClientDashboard() {
         formData.append('file', kbFile);
         try {
             const token = localStorage.getItem('voxiq_token');
-            const res = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/saas/upload-kb', {
+            const res = await fetch('http://localhost:5001/api/saas/upload-kb', {
                 method: 'POST',
                 headers: { 'x-auth-token': token },
                 body: formData
@@ -163,6 +191,18 @@ export default function ClientDashboard() {
             <main style={{ flex: 1, padding: '3rem', position: 'relative' }}>
                 <div className="bg-mesh" style={{ opacity: 0.5 }}></div>
 
+                {!user.hasSelectedPlan && (
+                    <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '1rem', borderRadius: '8px', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <strong style={{ color: '#ef4444', display: 'block', marginBottom: '0.25rem' }}>View-Only Mode: Plan Selection Required</strong>
+                            <span style={{ color: '#f8fafc', fontSize: '0.875rem' }}>You are previewing the dashboard. Please subscribe to a plan to unlock building AI agents and uploading knowledge bases.</span>
+                        </div>
+                        <button onClick={() => navigate('/select-plan')} className="primary" style={{ padding: '0.5rem 1.5rem', background: '#ef4444', color: 'white', border: 'none' }}>
+                            View Plans
+                        </button>
+                    </div>
+                )}
+
                 {/* Header */}
                 <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
                     <div>
@@ -197,14 +237,18 @@ export default function ClientDashboard() {
                                 </div>
                                 <button
                                     onClick={() => {
+                                        if (!user.hasSelectedPlan) {
+                                            navigate('/select-plan');
+                                            return;
+                                        }
                                         if (canCreateMore) setIsCreatingAgent(true);
                                     }}
                                     className="primary"
                                     style={{
                                         padding: '0.5rem 1rem',
                                         fontSize: '0.875rem',
-                                        opacity: canCreateMore ? 1 : 0.5,
-                                        cursor: canCreateMore ? 'pointer' : 'not-allowed'
+                                        opacity: (!user.hasSelectedPlan || !canCreateMore) ? 0.7 : 1,
+                                        cursor: (!user.hasSelectedPlan || canCreateMore) ? 'pointer' : 'not-allowed'
                                     }}
                                     title={!canCreateMore ? "Upgrade plan to create more agents" : ""}
                                 >
@@ -289,7 +333,7 @@ export default function ClientDashboard() {
                                         <div key={index} className="glass-card" style={{ padding: '1.5rem' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                    <div style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', padding: '0.5rem', borderRadius: '8px' }}><Bot size={24} /></div>
+                                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.875rem', fontWeight: 600 }}>Active Plan: {user?.plan || 'STARTER'}</div>
                                                     <div>
                                                         <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{agent.name}</h3>
                                                         <span style={{ fontSize: '0.75rem', color: '#22c55e', background: 'rgba(34, 197, 94, 0.1)', padding: '2px 8px', borderRadius: '12px' }}>Online</span>
@@ -317,7 +361,7 @@ export default function ClientDashboard() {
                             </div>
                         </div>
                     );
-                })}
+                })()}
 
                 {/* Tab Content: Knowledge Base */}
                 {activeTab === 'knowledge' && (
@@ -333,7 +377,18 @@ export default function ClientDashboard() {
                                 <p style={{ color: '#94a3b8', marginBottom: '2rem', maxWidth: '400px', margin: '0 auto 2rem auto' }}>
                                     Upload PDFs, TXT, or Word files. Your AI agents will read these documents and use the factual data to answer customer queries accurately.
                                 </p>
-                                <button onClick={() => setIsUploadingKB(true)} className="primary">Browse Files</button>
+                                <button
+                                    onClick={() => {
+                                        if (!user.hasSelectedPlan) {
+                                            navigate('/select-plan');
+                                            return;
+                                        }
+                                        setIsUploadingKB(true);
+                                    }}
+                                    className="primary"
+                                >
+                                    Browse Files
+                                </button>
                             </div>
                         ) : (
                             <div className="glass-card" style={{ padding: '2rem', border: '1px solid #6366f1' }}>
@@ -407,7 +462,7 @@ export default function ClientDashboard() {
                                     <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>₹{(user.walletBalance || 0).toFixed(2)}</span>
                                 </div>
 
-                                <button className="primary" style={{ width: '100%', justifyContent: 'center' }}>+ Add Funds via Razorpay</button>
+                                <button onClick={handleRecharge} className="primary" style={{ width: '100%', justifyContent: 'center' }}>+ Add Funds via Razorpay</button>
                             </div>
                         </div>
                     </div>

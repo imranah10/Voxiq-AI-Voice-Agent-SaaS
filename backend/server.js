@@ -43,14 +43,14 @@ app.post('/api/saas/create-agent', auth, async (req, res) => {
     const user = await User.findById(req.user.id);
     const agentCount = user.agents ? user.agents.length : 0;
     
-    if (!user.plan || user.plan === 'FREE') {
-        return res.status(403).json({ error: "Agent creation is not available on the Free Plan. Please upgrade to Pro or Enterprise to deploy agents." });
+    if ((!user.plan || user.plan === 'STARTER') && agentCount >= 5) {
+        return res.status(403).json({ error: "Starter Plan allows only 5 Agents. Please upgrade to Pro." });
     }
-    if (user.plan === 'PRO_PLATFORM' && agentCount >= 15) {
+    if (user.plan === 'PRO' && agentCount >= 15) {
         return res.status(403).json({ error: "Pro Plan allows 15 Agents. Please upgrade to Enterprise." });
     }
     if (user.plan === 'ENTERPRISE' && agentCount >= 50) {
-        return res.status(403).json({ error: "Enterprise Plan allows 50 Agents. Contact Support for higher limits." });
+        return res.status(403).json({ error: "Enterprise Plan allows 50 Agents. Please contact HQ for Custom Limits." });
     }
 
     // 1. Dynamic Name & Region Logic
@@ -270,6 +270,11 @@ app.post('/api/vapi/demo-outbound', auth, async (req, res) => {
             return res.status(400).json({ error: 'Prospect phone number is required' });
         }
 
+        const user = await User.findById(req.user.id);
+        if (!user || user.walletBalance < 5) {
+            return res.status(400).json({ error: 'Insufficient Demo Wallet funds. Please inject funds first (Cost: ₹5/call).' });
+        }
+
         const payload = {
             customer: {
                 number: prospectPhone
@@ -305,11 +310,8 @@ app.post('/api/vapi/demo-outbound', auth, async (req, res) => {
         });
 
         // Deduct ₹5 from Admin Wallet
-        const user = await User.findById(req.user.id);
-        if (user && user.walletBalance >= 5) {
-             user.walletBalance -= 5;
-             await user.save();
-        }
+        user.walletBalance -= 5;
+        await user.save();
 
         res.json({ message: 'Live pitch call initiated successfully!', callId: vapiResponse.data.id });
     } catch (error) {

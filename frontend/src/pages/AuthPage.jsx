@@ -22,7 +22,7 @@ export default function AuthPage() {
         if (isLogin) {
             // LOGIN FLOW
             try {
-                const response = await fetch(`https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/login`, {
+                const response = await fetch(`http://localhost:5001/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(formData)
@@ -43,7 +43,7 @@ export default function AuthPage() {
             try {
                 if (!showOtpInput) {
                     // Step 1: Request OTP
-                    const response = await fetch(`https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/send-otp`, {
+                    const response = await fetch(`http://localhost:5001/api/auth/send-otp`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email: formData.email })
@@ -54,11 +54,13 @@ export default function AuthPage() {
                     setSuccessMsg('Email Verification sent!');
                     if (data.testOtp) {
                         setTestOtpFromBackend(data.testOtp);
+                    } else {
+                        setTestOtpFromBackend(''); // Ensure it's hidden if real email is active
                     }
                     setShowOtpInput(true);
                 } else {
                     // Step 2: Verify OTP and Register
-                    const response = await fetch(`https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/register`, {
+                    const response = await fetch(`http://localhost:5001/api/auth/register`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ ...formData, otp })

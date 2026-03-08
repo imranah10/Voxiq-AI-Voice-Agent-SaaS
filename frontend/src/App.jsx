@@ -5,6 +5,7 @@ import ClientDashboard from './pages/ClientDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import AuthPage from './pages/AuthPage';
 import AdminAuthPage from './pages/AdminAuthPage';
+import SelectPlan from './pages/SelectPlan';
 import ProtectedRoute from './components/ProtectedRoute';
 import './index.css';
 
@@ -14,6 +15,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/select-plan" element={<SelectPlan />} />
         <Route path="/hq-admin-secure" element={<AdminAuthPage />} />
         <Route
           path="/dashboard"

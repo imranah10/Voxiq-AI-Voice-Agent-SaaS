@@ -14,7 +14,7 @@ export default function AdminAuthPage() {
         setLoading(true);
 
         try {
-            const response = await fetch('https://voxiq-ai-voice-agent-saas-1.onrender.com/api/auth/login', {
+            const response = await fetch('http://localhost:5001/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...formData, isAdminRoute: true })
@@ -32,8 +32,8 @@ export default function AdminAuthPage() {
             }
 
             // Success
-            localStorage.setItem('voxiq_token', data.token);
-            localStorage.setItem('voxiq_user', JSON.stringify(data.user));
+            localStorage.setItem('voxiq_admin_token', data.token);
+            localStorage.setItem('voxiq_admin_user', JSON.stringify(data.user));
 
             navigate('/admin');
 
